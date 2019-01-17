@@ -84,9 +84,16 @@ import org.opencv.utils.Converters;
    }
  */
 
+ /**
+  * Most of this code is stock from the Java example downloadable from frcvision.local.
+  * What has been added is the ability to run this program on a desktop computer, and 
+  * images are processed and output to an MJPEG stream. The readme in this project comes
+  * from this example, and is a good starting point for understanding how to deploy this
+  * code to the raspberry pi.
+  */
 public final class Main {
   private static String configFile = "/boot/frc.json";
-  private static boolean desktopTestingMode = true;
+  private static final String desktopModeFlag = "-desktop";
 
   @SuppressWarnings("MemberName")
   public static class CameraConfig {
@@ -205,6 +212,14 @@ public final class Main {
     System.out.println("Starting camera '" + config.name + "' on " + config.path);
     CameraServer inst = CameraServer.getInstance();
     UsbCamera camera = new UsbCamera(config.name, config.path);
+    // Uncomment the two lines below if you want unproccessed images publishished. 
+    // it is unadvisable to stream both unprocessed and processed images
+    // at the same time because of the ~4 megabit data cap when connected to FMS.
+    // it is possible, but you'll have to turn down image resolution and frame rates,
+    // which may impact effectiveness of the vision program and introduce greater 
+    // delays between when an image is captured and when the robot code recieves
+    // relevant data. This screws with control loops on the roborio.
+
     //MjpegServer server = inst.startAutomaticCapture(camera);
   
     Gson gson = new GsonBuilder().create();
@@ -220,19 +235,22 @@ public final class Main {
   }
 
   /**
-   * Example pipeline.
+   * This is the class which does the image processing. Everytime a frame is 
+   * made available, the function process(mat) is called. In order to access
+   * any data after the image is proccessed, it must be stored as a public 
+   * member variable. See the Main method for more.
    */
   public static class MyPipeline implements VisionPipeline {
-    public int val;
-    Size size = new Size(640, 480);
     public Mat bin = new Mat();
     public Mat out = new Mat();
 
     @Override
     public void process(Mat mat) {
-      val += 1;
       Mat hsv = new Mat();
+      // convert our image to grayscale to ensure OpenCV is modifying images
       Imgproc.cvtColor(mat, out, Imgproc.COLOR_BGR2GRAY);
+
+      // convert our RGB image to HSV in order to thresh hold it by color (hue) and intensity (saturation/value)
       //Imgproc.cvtColor(mat, hsv, Imgproc.COLOR_RGB2HSV);
       //Core.inRange(hsv, new Scalar(0, 0, 0), new Scalar(150, 255,255), bin);
     }
@@ -242,39 +260,26 @@ public final class Main {
    * Main.
    */
   public static void main(String... args) {
-    if (desktopTestingMode) {
-      System.load("C:\\Users\\Joshua\\opencv344\\opencv\\build\\java\\x64\\opencv_java344.dll");
-      System.load("C:\\Users\\Joshua\\opencv344\\opencv\\build\\x64\\vc15\\bin\\opencv_world344.dll");
-      //System.loadLibrary(Core.NATIVE_LIBRARY_NAME + ".dll");
+    boolean desktopMode = false;
+    if (args.length > 0) {
+      desktopMode = (args[0].equals(Main.desktopModeFlag));
+    }
+
+    if (desktopMode) {
       System.out.println("Debugging!");
+
+      System.load("C:\\Users\\Joshua\\opencv344\\opencv\\build\\java\\x64\\opencv_java344.dll");
+
       Mat image = Imgcodecs.imread("E:\\OneDrive\\Pictures\\Steam Prof Pic.jpg");
+      showImage(image, "Input");
 
-      MyPipeline pipline = new MyPipeline();
-      pipline.process(image);
-      BufferedImage display = ConvertMat2Image(pipline.out);
-
-      SwingUtilities.invokeLater(new Runnable()
-      {
-        public void run()
-        {
-          JFrame editorFrame = new JFrame("Image Demo");
-          editorFrame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-          
-         
-          ImageIcon imageIcon = new ImageIcon(display);
-          JLabel jLabel = new JLabel();
-          jLabel.setIcon(imageIcon);
-          editorFrame.getContentPane().add(jLabel, BorderLayout.CENTER);
-
-          editorFrame.pack();
-          editorFrame.setLocationRelativeTo(null);
-          editorFrame.setVisible(true);
-        }
-      });
-
+      MyPipeline pipeline = new MyPipeline();
+      pipeline.process(image);
+      showImage(pipeline.out, "Output");
 
       return;
-    } 
+    }
+
     if (args.length > 0) {
       configFile = args[0];
     }
@@ -300,11 +305,15 @@ public final class Main {
       cameras.add(startCamera(cameraConfig));
     }
 
+    // creates an MJPEG server for our output images, but we still have to give it images to output
     CvSource output = CameraServer.getInstance().putVideo("Proc", 640, 480);
+
     // start image processing on camera 0 if present
     if (cameras.size() >= 1) {
       VisionThread visionThread = new VisionThread(cameras.get(0),
               new MyPipeline(), pipeline -> {
+              
+              // give our output MJPEG server our processed image 
               output.putFrame(pipeline.out);
       });
       /* something like this for GRIP:
@@ -312,7 +321,7 @@ public final class Main {
               new GripPipeline(), pipeline -> {
         ...
       });
-       */
+      */
       visionThread.start();
     }
 
@@ -324,6 +333,29 @@ public final class Main {
         return;
       }
     }
+  }
+
+  private static void showImage(Mat image, String windowName) {
+    BufferedImage display = ConvertMat2Image(image);
+
+      SwingUtilities.invokeLater(new Runnable()
+      {
+        public void run()
+        {
+          JFrame editorFrame = new JFrame(windowName);
+          editorFrame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+          
+         
+          ImageIcon imageIcon = new ImageIcon(display);
+          JLabel jLabel = new JLabel();
+          jLabel.setIcon(imageIcon);
+          editorFrame.getContentPane().add(jLabel, BorderLayout.CENTER);
+
+          editorFrame.pack();
+          editorFrame.setLocationRelativeTo(null);
+          editorFrame.setVisible(true);
+        }
+      });
   }
 
   private static BufferedImage ConvertMat2Image(Mat imgContainer) {
