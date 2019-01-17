@@ -1,7 +1,7 @@
 @if "%DEBUG%" == "" @echo off
 @rem ##########################################################################
 @rem
-@rem  java-multiCameraServer startup script for Windows
+@rem  FRC2019 - Vision startup script for Windows
 @rem
 @rem ##########################################################################
 
@@ -13,7 +13,7 @@ if "%DIRNAME%" == "" set DIRNAME=.
 set APP_BASE_NAME=%~n0
 set APP_HOME=%DIRNAME%..
 
-@rem Add default JVM options here. You can also use JAVA_OPTS and JAVA_MULTI_CAMERA_SERVER_OPTS to pass JVM options to this script.
+@rem Add default JVM options here. You can also use JAVA_OPTS and FR_C2019_VISION_OPTS to pass JVM options to this script.
 set DEFAULT_JVM_OPTS=
 
 @rem Find java.exe
@@ -63,19 +63,19 @@ set CMD_LINE_ARGS=%*
 :execute
 @rem Setup the command line
 
-set CLASSPATH=%APP_HOME%\lib\java-multiCameraServer-all.jar
+set CLASSPATH=%APP_HOME%\lib\FRC2019 - Vision.jar;%APP_HOME%\lib\gson-2.8.5.jar;%APP_HOME%\lib\wpiutil.jar;%APP_HOME%\lib\ntcore.jar;%APP_HOME%\lib\cscore.jar;%APP_HOME%\lib\cameraserver.jar;%APP_HOME%\lib\opencv-344.jar;%APP_HOME%\lib\wpilibj.jar;%APP_HOME%\lib\wpiHal.jar
 
-@rem Execute java-multiCameraServer
-"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %JAVA_MULTI_CAMERA_SERVER_OPTS%  -jar "%CLASSPATH%" %CMD_LINE_ARGS%
+@rem Execute FRC2019 - Vision
+"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %FR_C2019_VISION_OPTS%  -classpath "%CLASSPATH%" Main %CMD_LINE_ARGS%
 
 :end
 @rem End local scope for the variables with windows NT shell
 if "%ERRORLEVEL%"=="0" goto mainEnd
 
 :fail
-rem Set variable JAVA_MULTI_CAMERA_SERVER_EXIT_CONSOLE if you need the _script_ return code instead of
+rem Set variable FR_C2019_VISION_EXIT_CONSOLE if you need the _script_ return code instead of
 rem the _cmd.exe /c_ return code!
-if  not "" == "%JAVA_MULTI_CAMERA_SERVER_EXIT_CONSOLE%" exit 1
+if  not "" == "%FR_C2019_VISION_EXIT_CONSOLE%" exit 1
 exit /b 1
 
 :mainEnd

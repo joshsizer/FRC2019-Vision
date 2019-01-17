@@ -5,11 +5,22 @@
 /* the project.                                                               */
 /*----------------------------------------------------------------------------*/
 
+import java.awt.BorderLayout;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+
+import javax.imageio.ImageIO;
+import javax.swing.ImageIcon;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.SwingUtilities;
+import javax.swing.WindowConstants;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -30,8 +41,11 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 import org.opencv.core.Core;
 import org.opencv.core.Mat;
+import org.opencv.core.MatOfByte;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
+import org.opencv.highgui.HighGui;
+import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.utils.Converters;
 
@@ -72,6 +86,7 @@ import org.opencv.utils.Converters;
 
 public final class Main {
   private static String configFile = "/boot/frc.json";
+  private static boolean desktopTestingMode = true;
 
   @SuppressWarnings("MemberName")
   public static class CameraConfig {
@@ -211,12 +226,13 @@ public final class Main {
     public int val;
     Size size = new Size(640, 480);
     public Mat bin = new Mat();
+    public Mat out = new Mat();
 
     @Override
     public void process(Mat mat) {
       val += 1;
       Mat hsv = new Mat();
-      Imgproc.cvtColor(mat, bin, Imgproc.COLOR_BGR2GRAY);
+      Imgproc.cvtColor(mat, out, Imgproc.COLOR_BGR2GRAY);
       //Imgproc.cvtColor(mat, hsv, Imgproc.COLOR_RGB2HSV);
       //Core.inRange(hsv, new Scalar(0, 0, 0), new Scalar(150, 255,255), bin);
     }
@@ -226,6 +242,39 @@ public final class Main {
    * Main.
    */
   public static void main(String... args) {
+    if (desktopTestingMode) {
+      System.load("C:\\Users\\Joshua\\opencv344\\opencv\\build\\java\\x64\\opencv_java344.dll");
+      System.load("C:\\Users\\Joshua\\opencv344\\opencv\\build\\x64\\vc15\\bin\\opencv_world344.dll");
+      //System.loadLibrary(Core.NATIVE_LIBRARY_NAME + ".dll");
+      System.out.println("Debugging!");
+      Mat image = Imgcodecs.imread("E:\\OneDrive\\Pictures\\Steam Prof Pic.jpg");
+
+      MyPipeline pipline = new MyPipeline();
+      pipline.process(image);
+      BufferedImage display = ConvertMat2Image(pipline.out);
+
+      SwingUtilities.invokeLater(new Runnable()
+      {
+        public void run()
+        {
+          JFrame editorFrame = new JFrame("Image Demo");
+          editorFrame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+          
+         
+          ImageIcon imageIcon = new ImageIcon(display);
+          JLabel jLabel = new JLabel();
+          jLabel.setIcon(imageIcon);
+          editorFrame.getContentPane().add(jLabel, BorderLayout.CENTER);
+
+          editorFrame.pack();
+          editorFrame.setLocationRelativeTo(null);
+          editorFrame.setVisible(true);
+        }
+      });
+
+
+      return;
+    } 
     if (args.length > 0) {
       configFile = args[0];
     }
@@ -256,7 +305,7 @@ public final class Main {
     if (cameras.size() >= 1) {
       VisionThread visionThread = new VisionThread(cameras.get(0),
               new MyPipeline(), pipeline -> {
-              output.putFrame(pipeline.bin);
+              output.putFrame(pipeline.out);
       });
       /* something like this for GRIP:
       VisionThread visionThread = new VisionThread(cameras.get(0),
@@ -276,4 +325,23 @@ public final class Main {
       }
     }
   }
+
+  private static BufferedImage ConvertMat2Image(Mat imgContainer) {
+    MatOfByte byteMatData = new MatOfByte();
+    //image formatting
+    Imgcodecs.imencode(".jpg", imgContainer,byteMatData);
+    // Convert to array
+    byte[] byteArray = byteMatData.toArray();
+    BufferedImage img= null;
+    try {
+        InputStream in = new ByteArrayInputStream(byteArray);
+        //load image
+        img = ImageIO.read(in);
+    } catch (Exception e) {
+        e.printStackTrace();
+        return null;
+    }
+    return img;
+  }
+  
 }
