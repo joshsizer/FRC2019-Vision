@@ -220,7 +220,7 @@ public final class Main {
     // delays between when an image is captured and when the robot code recieves
     // relevant data. This screws with control loops on the roborio.
 
-    //MjpegServer server = inst.startAutomaticCapture(camera);
+    MjpegServer server = inst.startAutomaticCapture(camera);
   
     Gson gson = new GsonBuilder().create();
 
@@ -228,7 +228,7 @@ public final class Main {
     camera.setConnectionStrategy(VideoSource.ConnectionStrategy.kKeepOpen);
 
     if (config.streamConfig != null) {
-      //server.setConfigJson(gson.toJson(config.streamConfig));
+      server.setConfigJson(gson.toJson(config.streamConfig));
     }
 
     return camera;
@@ -242,17 +242,40 @@ public final class Main {
    */
   public static class MyPipeline implements VisionPipeline {
     public Mat bin = new Mat();
+    public Mat hsv = new Mat();
     public Mat out = new Mat();
+    public int val = 0;
+
+    public int hMin = 86;
+    public int sMin = 60;
+    public int vMin = 64;
+
+    public int hMax = 114;
+    public int sMax = 255;
+    public int vMax = 255;
 
     @Override
     public void process(Mat mat) {
-      Mat hsv = new Mat();
+      Timer timer = new Timer();
+      
       // convert our image to grayscale to ensure OpenCV is modifying images
-      Imgproc.cvtColor(mat, out, Imgproc.COLOR_BGR2GRAY);
+      //mgproc.cvtColor(mat, out, Imgproc.COLOR_BGR2GRAY);
 
+      
       // convert our RGB image to HSV in order to thresh hold it by color (hue) and intensity (saturation/value)
-      //Imgproc.cvtColor(mat, hsv, Imgproc.COLOR_RGB2HSV);
-      //Core.inRange(hsv, new Scalar(0, 0, 0), new Scalar(150, 255,255), bin);
+      timer.start();
+      Imgproc.cvtColor(mat, hsv, Imgproc.COLOR_BGR2HSV);
+      timer.stop();
+      print("Converting from BGR to HSV", timer);
+
+      timer.start();
+      Core.inRange(hsv, new Scalar(hMin, sMin, vMin), new Scalar(hMax, sMax, vMax), bin);
+      timer.stop();
+      print("Thresholding HSV", timer);
+
+      timer.start();
+      
+      out = bin;
     }
   }
 
@@ -270,7 +293,7 @@ public final class Main {
 
       System.load("C:\\Users\\Joshua\\opencv344\\opencv\\build\\java\\x64\\opencv_java344.dll");
 
-      Mat image = Imgcodecs.imread("E:\\OneDrive\\Pictures\\Steam Prof Pic.jpg");
+      Mat image = Imgcodecs.imread("C:\\Users\\Joshua\\Pictures\\P-20161108-00861_HiRes-JPEG-24bit-RGB-News.jpg");
       showImage(image, "Input");
 
       MyPipeline pipeline = new MyPipeline();
@@ -374,6 +397,27 @@ public final class Main {
         return null;
     }
     return img;
+  }
+
+  public static void print(String message, Timer t) {
+    System.out.println(message + " took " + t.getElapsed() + " ms");
+  }
+
+  private static class Timer {
+    private long startTime;
+    private long endTime;
+
+    void start() {
+      startTime = System.nanoTime();
+    }
+
+    void stop() {
+      endTime = System.nanoTime();
+    }
+
+    double getElapsed() {
+      return (endTime - startTime) / 1e6;
+    }
   }
   
 }
