@@ -222,13 +222,13 @@ public final class Main {
     public Mat out = new Mat();
     public int val = 0;
 
-    public int hMin = 50;
-    public int sMin = 140;
-    public int vMin = 140;
+    public int hMin = 0; // 50
+    public int sMin = 0; // 140
+    public int vMin = 50; // 140
 
-    public int hMax = 95;
-    public int sMax = 255;
-    public int vMax = 255;
+    public int hMax = 180; // 95
+    public int sMax = 255; // 255
+    public int vMax = 255; // 255
 
     // target angle bounds
     public int tPosUp = 64; // negative upper bound
@@ -258,24 +258,24 @@ public final class Main {
       timer.stop();
       print("Thresholding HSV", timer);
 
-      showImage(bin, "Bin");
-
       // perform opening Morphological transformation to remove any small noise
       // that may have entered into the binary image.
       // see :
       // https://docs.opencv.org/3.4/d9/d61/tutorial_py_morphological_ops.html
       // You can change the parameters of kernal to 'tune' its effects
+      // timer.start();
+      // Mat kernel = Mat.ones(5, 5, CvType.CV_8SC1);
+      // Imgproc.morphologyEx(bin, bin, Imgproc.MORPH_CLOSE, kernel);
+      // timer.stop();
+      // print("Morph opening", timer);
+
+
       timer.start();
-      Mat kernel = Mat.ones(5, 5, CvType.CV_8SC1);
-      Imgproc.morphologyEx(bin, bin, Imgproc.MORPH_OPEN, kernel);
-      timer.stop();
-      print("Morph opening", timer);
-
-      showImage(bin, "Opening Morphology");
-
       List<MatOfPoint> binContours = new ArrayList<>();
       Imgproc.findContours(bin, binContours, new Mat(), Imgproc.RETR_LIST,
           Imgproc.CHAIN_APPROX_SIMPLE);
+      timer.stop();
+      print("Finding contours", timer);
 
       List<MatOfPoint> filteredContours = new ArrayList<>();
       List<Pair> targets = new ArrayList<>();
@@ -286,41 +286,38 @@ public final class Main {
       for (int i = 0; i < binContours.size(); i++) {
         MatOfPoint contour = binContours.get(i); // current contour
 
-        // // filter out contours that are too small
-        // double contourArea = Imgproc.contourArea(contour);
-        // System.out.println("Contour area: " + contourArea);
-        // if (contourArea < contourAreaMin) {
-        // System.out.println("Removed contour by area: " + contourArea);
-        // continue;
-        // }
+        // filter out contours that are too small
+        double contourArea = Imgproc.contourArea(contour);
+        if (contourArea < contourAreaMin) {
+          System.out.println("Removing contour for area");
+          continue;
+        }
 
         // Get the "Rotated Rectangle" representation of our contour
+        timer.start();
         RotatedRect rectangle = Imgproc.minAreaRect(new MatOfPoint2f(contour.toArray()));
+        timer.stop();
+        print("Min area rect", timer);
 
         // filter out rectangles that are at the incorrect tilt
         // not sure what reference frame this is using, but are
         // experimentally produced numbers
-        System.out.println("Angle: " + rectangle.angle);
         if ((rectangle.angle < tNegLow || rectangle.angle > tNegUp)
             && (rectangle.angle < tPosLow || rectangle.angle > tPosUp)) {
-          System.out.println("Removed contour by angle: " + rectangle.angle);
+              System.out.println("Removing contour for angle");
           continue;
         }
 
         // convert contour into a MatOfPoint again, so it's easier to work with
         BetterRectangle betRect = new BetterRectangle(rectangle, mat);
 
-        // height / width = 2.777, 2.91, 2.57, 2.55, 3.77
+        // sampled height / width: = 2.777, 2.91, 2.57, 2.55, 3.77
 
         double ratio = betRect.height / betRect.width;
         if (ratio > ratioMax || ratio < ratioMin) {
-          System.out.println("Removed contour by height:width ratio");
+          System.out.println("Removing contour for ratio");
           continue;
         }
-
-        // add our contour to the list of accepted contours to be printed to
-        // the screen
-        System.out.println("Pos: " + betRect.rotatedRectangle.center.x);
 
         if (lastRectangle == null) {
           lastRectangle = betRect;
@@ -333,28 +330,20 @@ public final class Main {
           // the contours are in order from right to left
           // and form a pair
           targets.add(new Pair(betRect, lastRectangle));
-          System.out.println("Added a pair!");
         } else if (posDif > 0 && betRect.angle > lastRectangle.angle) {
           // the contours are in order from left to right
           // and form a pair
           targets.add(new Pair(lastRectangle, betRect));
-          System.out.println("Added a pair!");
         }
 
         lastRectangle = betRect;
       }
 
-      System.out.println("Targets size: " + targets.size());
-      for (Pair t : targets) {
-        System.out.println("Adding printing target");
-        MatOfPoint left = t.left.matOfPoint;
-        MatOfPoint right = t.right.matOfPoint;
-        System.out.println(left + " |||| " + right);
-        filteredContours.add(left);
-        filteredContours.add(right);
+      for (Pair t : targets) {  
+        filteredContours.add(t.left.matOfPoint);
+        filteredContours.add(t.right.matOfPoint);
       }
 
-      System.out.println(filteredContours.size());
       Imgproc.drawContours(mat, filteredContours, -1, new Scalar(0, 0, 255), 2);
       out = mat;
     }
