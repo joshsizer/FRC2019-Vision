@@ -10,7 +10,7 @@ allImages = os.listdir(imagePath)
 os.system('./gradlew build')
 
 
-# for file in allImages:
-#   if file.endswith(".jpg"):
-#        os.system('java -jar ' + jarFile +
-#                  ' -desktop -images ' + imagePath + '/' + file)
+for file in allImages:
+    if file.endswith(".jpg"):
+        os.system('java -jar ' + jarFile +
+                  ' -desktop -images ' + imagePath + '/' + file)

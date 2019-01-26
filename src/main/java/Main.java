@@ -14,6 +14,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Hashtable;
 import java.util.List;
 import javax.imageio.ImageIO;
 import javax.swing.ImageIcon;
@@ -35,6 +36,7 @@ import edu.wpi.first.cameraserver.CameraServer;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.vision.VisionPipeline;
 import edu.wpi.first.vision.VisionThread;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfByte;
@@ -58,11 +60,10 @@ import org.opencv.core.Point;
  */
 
 /**
- * Most of this code is stock from the Java example downloadable from
- * frcvision.local. What has been added is the ability to run this program on a
- * desktop computer, and images are processed and output to an MJPEG stream. The
- * readme in this project comes from this example, and is a good starting point
- * for understanding how to deploy this code to the raspberry pi.
+ * Most of this code is stock from the Java example downloadable from frcvision.local. What has been
+ * added is the ability to run this program on a desktop computer, and images are processed and
+ * output to an MJPEG stream. The readme in this project comes from this example, and is a good
+ * starting point for understanding how to deploy this code to the raspberry pi.
  */
 public final class Main {
   private static String configFile = "/boot/frc.json";
@@ -188,6 +189,7 @@ public final class Main {
     System.out.println("Starting camera '" + config.name + "' on " + config.path);
     CameraServer inst = CameraServer.getInstance();
     UsbCamera camera = new UsbCamera(config.name, config.path);
+
     // Uncomment the two lines below if you want unproccessed images publishished.
     // it is unadvisable to stream both unprocessed and processed images
     // at the same time because of the ~4 megabit data cap when connected to FMS.
@@ -212,20 +214,26 @@ public final class Main {
   }
 
   /**
-   * This is the class which does the image processing. Everytime a frame is made
-   * available, the function process(mat) is called. In order to access any data
-   * after the image is proccessed, it must be stored as a public member variable.
-   * See the Main method for more.
+   * This is the class which does the image processing. Everytime a frame is made available, the
+   * function process(mat) is called. In order to access any data after the image is proccessed, it
+   * must be stored as a public member variable. See the Main method for more.
    */
   public static class MyPipeline implements VisionPipeline {
+    // note that field of view changes based on aspect ratio
+    // published for logitech camera is 60 in 16:9, which
+    // is 45 in 4:3
+    public double FOV = 60;
+    public double width = 320;
+    public double height = 240;
+
     public Mat bin = new Mat();
     public Mat hsv = new Mat();
     public Mat out = new Mat();
     public int val = 0;
 
     public int hMin = 45; // 50
-    public int sMin = 202; // 140
-    public int vMin = 100; // 140
+    public int sMin = 50; // 140
+    public int vMin = 60; // 140
 
     public int hMax = 100; // 95
     public int sMax = 255; // 255
@@ -238,11 +246,17 @@ public final class Main {
     public int tNegLow = -81; // positive lower bound
 
     public int contourAreaMin = 90;
+    public double robotHeading;
     public double ratioMin = 2.2;
     public double ratioMax = 4;
 
     @Override
     public void process(Mat mat) {
+      if (!debugMode) {
+        robotHeading = SmartDashboard.getNumber("heading", 0);
+      }
+
+      // we grab the robot's heading before
       Timer timer = new Timer();
 
       // convert our RGB image to HSV
@@ -272,13 +286,14 @@ public final class Main {
 
       timer.start();
       List<MatOfPoint> binContours = new ArrayList<>();
-      Imgproc.findContours(bin, binContours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE);
+      Imgproc.findContours(bin, binContours, new Mat(), Imgproc.RETR_LIST,
+          Imgproc.CHAIN_APPROX_SIMPLE);
       timer.stop();
       // print("Finding contours", timer);
 
       List<MatOfPoint> filteredContours = new ArrayList<>();
+      List<BetterRectangle> allRectanglesThatMayBePartOfATargetPair = new ArrayList<>();
       List<Pair> targets = new ArrayList<>();
-      BetterRectangle lastRectangle = null;
 
       // Loop through each contour, removing contours that don't match our
       // "description" of a target
@@ -287,8 +302,9 @@ public final class Main {
 
         // filter out contours that are too small
         double contourArea = Imgproc.contourArea(contour);
+        System.out.println("Area: " + contourArea);
         if (contourArea < contourAreaMin) {
-          // System.out.println("Removing contour for area");
+          System.out.println("Removing contour for area");
           continue;
         }
 
@@ -303,7 +319,7 @@ public final class Main {
         // experimentally produced numbers
         if ((rectangle.angle < tNegLow || rectangle.angle > tNegUp)
             && (rectangle.angle < tPosLow || rectangle.angle > tPosUp)) {
-          // System.out.println("Removing contour for angle");
+          System.out.println("Removing contour for angle");
           continue;
         }
 
@@ -319,27 +335,113 @@ public final class Main {
           continue;
         }
 
-        if (lastRectangle == null) {
-          lastRectangle = betRect;
-          continue;
-        }
+        allRectanglesThatMayBePartOfATargetPair.add(betRect);
 
-        double posDif = betRect.rotatedRectangle.center.x - lastRectangle.rotatedRectangle.center.x;
+        // double posDif = betRect.rotatedRectangle.center.x -
+        // lastRectangle.rotatedRectangle.center.x;
 
-        if (posDif < 0 && betRect.angle < lastRectangle.angle) {
-          // the contours are in order from right to left
-          // and form a pair
-          targets.add(new Pair(betRect, lastRectangle));
-        } else if (posDif > 0 && betRect.angle > lastRectangle.angle) {
-          // the contours are in order from left to right
-          // and form a pair
-          targets.add(new Pair(lastRectangle, betRect));
-        }
-
-        lastRectangle = betRect;
+        // if (posDif < 0 && betRect.angle < lastRectangle.angle) {
+        // // the contours are in order from right to left
+        // // and form a pair
+        // targets.add(new Pair(betRect, lastRectangle));
+        // } else if (posDif > 0 && betRect.angle > lastRectangle.angle) {
+        // // the contours are in order from left to right
+        // // and form a pair
+        // targets.add(new Pair(lastRectangle, betRect));
+        // }
       }
 
+      Hashtable<BetterRectangle, Boolean> taken = new Hashtable<>();
+
+      for (BetterRectangle halfTarget : allRectanglesThatMayBePartOfATargetPair) {
+        if (taken.contains(halfTarget)) {
+          continue;
+        }
+        for (BetterRectangle possibleMatch : allRectanglesThatMayBePartOfATargetPair) {
+
+          if (taken.contains(possibleMatch)) {
+            continue;
+          }
+          if (possibleMatch == halfTarget) {
+            continue;
+          }
+
+          // we expect a pair to have differing angles
+          if (Math.abs(halfTarget.angle) - Math.abs(possibleMatch.angle) < 20) {
+            System.out.println("Removing for angle sameness");
+            continue;
+          }
+
+          double width1 = halfTarget.width;
+          double width2 = possibleMatch.width;
+
+          // we expect our two half targets to be similar in width
+          if (Math.abs(width1 - width2) > 50) {
+            System.out.println("Removing for width difference");
+            continue;
+          }
+
+          double avgWidth = (width1 + width2) / 2.0;
+          double distance = Math
+              .abs(halfTarget.rotatedRectangle.center.x - possibleMatch.rotatedRectangle.center.x);
+
+          double distToWidthRatio = distance / avgWidth;
+
+          System.out.println("Distance: " + distance);
+          System.out.println("Avg. Width: " + avgWidth);
+          System.out.println("Distance:width ratio: " + distToWidthRatio);
+
+          if (distToWidthRatio > 6 || distToWidthRatio < 4) {
+            System.out.println("Targets too close or too far apart!");
+            continue;
+          }
+
+          taken.put(halfTarget, true);
+          taken.put(possibleMatch, true);
+
+          double posDif =
+              halfTarget.rotatedRectangle.center.x - possibleMatch.rotatedRectangle.center.x;
+
+          if (posDif < 0 && halfTarget.angle < possibleMatch.angle) {
+            // the contours are in order from right to left
+            // and form a pair
+            targets.add(new Pair(halfTarget, possibleMatch));
+          } else if (posDif > 0 && halfTarget.angle > possibleMatch.angle) {
+            // the contours are in order from left to right
+            // and form a pair
+            targets.add(new Pair(possibleMatch, halfTarget));
+          }
+
+        }
+      }
+
+
       for (Pair t : targets) {
+        // find center of the target
+        double leftx = t.left.rotatedRectangle.center.x;
+        double lefty = t.left.rotatedRectangle.center.y;
+        double rightx = t.right.rotatedRectangle.center.x;
+        double righty = t.right.rotatedRectangle.center.y;
+        double centerx = (leftx + rightx) / 2.0;
+        double centery = (lefty + righty) / 2.0;
+        Imgproc.circle(mat, new Point(centerx, centery), 3, new Scalar(0, 0, 255), -1);
+
+        double imageCenterx = (width / 2);
+
+
+        // negative means to the left of center
+        // diff angle
+        // ----- == ------
+        // width FOV / 2
+        double diff = centerx - imageCenterx;
+        double angleDiff = (diff / width) * FOV / 2;
+        System.out.println("Angle: " + angleDiff);
+
+        if (!debugMode) {
+          robotHeading = robotHeading + angleDiff;
+          SmartDashboard.putNumber("target_angle", robotHeading);
+        }
+
         filteredContours.add(t.left.matOfPoint);
         filteredContours.add(t.right.matOfPoint);
       }
@@ -348,6 +450,8 @@ public final class Main {
       out = mat;
     }
   }
+
+  public static boolean debugMode = false;
 
   /**
    * Main.
@@ -361,6 +465,7 @@ public final class Main {
 
       if (arg.equals(Main.desktopModeFlag)) {
         desktopMode = true;
+        debugMode = true;
       } else if (arg.equals(Main.imageFolderFlag) && i + 1 < args.length) {
         imageFolderPath = args[i + 1];
       }
@@ -414,8 +519,8 @@ public final class Main {
     // creates an MJPEG server for our output images, but we still have to give it
     // images to
     // output
-    CvSource output = CameraServer.getInstance().putVideo("Proc", 320, 240);
-    CvSource bin = CameraServer.getInstance().putVideo("Bin", 320, 240);
+    CvSource output = CameraServer.getInstance().putVideo("Proc", 432, 240);
+    CvSource bin = CameraServer.getInstance().putVideo("Bin", 432, 240);
 
     // start image processing on camera 0 if present
     if (cameras.size() >= 1) {
@@ -426,8 +531,8 @@ public final class Main {
         bin.putFrame(pipeline.bin);
       });
       /*
-       * something like this for GRIP: VisionThread visionThread = new
-       * VisionThread(cameras.get(0), new GripPipeline(), pipeline -> { ... });
+       * something like this for GRIP: VisionThread visionThread = new VisionThread(cameras.get(0),
+       * new GripPipeline(), pipeline -> { ... });
        */
       visionThread.start();
     }

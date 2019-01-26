@@ -1,97 +1,73 @@
 {
-    "cameras": [
+  "cameras": [
+    {
+      "brightness": 0,
+      "fps": 15,
+      "height": 240,
+      "name": "Logitech C270 Webcam",
+      "path": "/dev/video0",
+      "pixel format": "mjpeg",
+      "properties": [
         {
-            "brightness": 0,
-            "fps": 15,
-            "height": 240,
-            "name": "Logitech C270 Webcam",
-            "path": "/dev/video0",
-            "pixel format": "mjpeg",
-            "properties": [
-                {
-                    "name": "connect_verbose",
-                    "value": 1
-                },
-                {
-                    "name": "raw_brightness",
-                    "value": 0
-                },
-                {
-                    "name": "brightness",
-                    "value": 0
-                },
-                {
-                    "name": "raw_contrast",
-                    "value": 28
-                },
-                {
-                    "name": "contrast",
-                    "value": 11
-                },
-                {
-                    "name": "raw_saturation",
-                    "value": 61
-                },
-                {
-                    "name": "saturation",
-                    "value": 24
-                },
-                {
-                    "name": "white_balance_temperature_auto",
-                    "value": false
-                },
-                {
-                    "name": "raw_gain",
-                    "value": 135
-                },
-                {
-                    "name": "gain",
-                    "value": 53
-                },
-                {
-                    "name": "power_line_frequency",
-                    "value": 2
-                },
-                {
-                    "name": "white_balance_temperature",
-                    "value": 4890
-                },
-                {
-                    "name": "raw_sharpness",
-                    "value": 0
-                },
-                {
-                    "name": "sharpness",
-                    "value": 0
-                },
-                {
-                    "name": "backlight_compensation",
-                    "value": 0
-                },
-                {
-                    "name": "exposure_auto",
-                    "value": 1
-                },
-                {
-                    "name": "raw_exposure_absolute",
-                    "value": 100
-                },
-                {
-                    "name": "exposure_absolute",
-                    "value": 1
-                },
-                {
-                    "name": "exposure_auto_priority",
-                    "value": false
-                }
-            ],
-            "stream": {
-                "properties": []
-            },
-            "white balance": "auto",
-            "width": 320
+          "name": "connect_verbose",
+          "value": 1
+        },
+        {
+          "name": "brightness",
+          "value": 21
+        },
+        {
+          "name": "contrast",
+          "value": 12
+        },
+        {
+          "name": "saturation",
+          "value": 37
+        },
+        {
+          "name": "white_balance_temperature_auto",
+          "value": false
+        },
+        {
+          "name": "gain",
+          "value": 24
+        },
+        {
+          "name": "power_line_frequency",
+          "value": 0
+        },
+        {
+          "name": "white_balance_temperature",
+          "value": 10000
+        },
+        {
+          "name": "sharpness",
+          "value": 0
+        },
+        {
+          "name": "backlight_compensation",
+          "value": 0
+        },
+        {
+          "name": "exposure_auto",
+          "value": 1
+        },
+        {
+          "name": "exposure_absolute",
+          "value": 1
+        },
+        {
+          "name": "exposure_auto_priority",
+          "value": false
         }
-    ],
-    "ntmode": "server",
-    "team": 2641
+      ],
+      "stream": {
+        "properties": []
+      },
+      "white balance": "hold",
+      "width": 432
+    }
+  ],
+  "ntmode": "server",
+  "team": 2641
 }
