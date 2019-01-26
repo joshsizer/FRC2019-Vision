@@ -38,12 +38,14 @@ import edu.wpi.first.vision.VisionPipeline;
 import edu.wpi.first.vision.VisionThread;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import org.opencv.core.Core;
+import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfByte;
 import org.opencv.core.MatOfPoint;
 import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.RotatedRect;
 import org.opencv.core.Scalar;
+import org.opencv.core.Size;
 import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.core.Point;
@@ -223,7 +225,7 @@ public final class Main {
     // published for logitech camera is 60 in 16:9, which
     // is 45 in 4:3
     public double FOV = 60;
-    public double width = 320;
+    public double width = 432;
     public double height = 240;
 
     public Mat bin = new Mat();
@@ -231,8 +233,8 @@ public final class Main {
     public Mat out = new Mat();
     public int val = 0;
 
-    public int hMin = 45; // 50
-    public int sMin = 50; // 140
+    public int hMin = 29; // 50
+    public int sMin = 90; // 140
     public int vMin = 60; // 140
 
     public int hMax = 100; // 95
@@ -279,9 +281,9 @@ public final class Main {
       // https://docs.opencv.org/3.4/d9/d61/tutorial_py_morphological_ops.html
       // You can change the parameters of kernal to 'tune' its effects
       // timer.start();
-      // Mat kernel = Mat.ones(5, 5, CvType.CV_8SC1);
-      // Imgproc.morphologyEx(bin, bin, Imgproc.MORPH_CLOSE, kernel);
-      // timer.stop();
+      Mat kernel = Mat.ones(5, 5, CvType.CV_8SC1);
+      Imgproc.morphologyEx(bin, bin, Imgproc.MORPH_CLOSE, kernel);
+      timer.stop();
       // print("Morph opening", timer);
 
       timer.start();
@@ -302,9 +304,9 @@ public final class Main {
 
         // filter out contours that are too small
         double contourArea = Imgproc.contourArea(contour);
-        System.out.println("Area: " + contourArea);
+        // System.out.println("Area: " + contourArea);
         if (contourArea < contourAreaMin) {
-          System.out.println("Removing contour for area");
+          // System.out.println("Removing contour for area");
           continue;
         }
 
@@ -319,103 +321,124 @@ public final class Main {
         // experimentally produced numbers
         if ((rectangle.angle < tNegLow || rectangle.angle > tNegUp)
             && (rectangle.angle < tPosLow || rectangle.angle > tPosUp)) {
-          System.out.println("Removing contour for angle");
+          // System.out.println("Removing contour for angle");
           continue;
         }
 
         // convert contour into a MatOfPoint again, so it's easier to work with
-        BetterRectangle betRect = new BetterRectangle(rectangle, mat);
+        BetterRectangle betRect = new BetterRectangle(rectangle);
 
         // sampled height / width: = 2.777, 2.91, 2.57, 2.55, 3.77
 
         double ratio = betRect.height / betRect.width;
-        System.out.println("Ratio: " + ratio);
+        // System.out.println("Ratio: " + ratio);
         if (ratio > ratioMax || ratio < ratioMin) {
-          System.out.println("Removing contour for ratio");
+          // System.out.println("Removing contour for ratio");
           continue;
         }
 
         allRectanglesThatMayBePartOfATargetPair.add(betRect);
-
-        // double posDif = betRect.rotatedRectangle.center.x -
-        // lastRectangle.rotatedRectangle.center.x;
-
-        // if (posDif < 0 && betRect.angle < lastRectangle.angle) {
-        // // the contours are in order from right to left
-        // // and form a pair
-        // targets.add(new Pair(betRect, lastRectangle));
-        // } else if (posDif > 0 && betRect.angle > lastRectangle.angle) {
-        // // the contours are in order from left to right
-        // // and form a pair
-        // targets.add(new Pair(lastRectangle, betRect));
-        // }
       }
 
-      Hashtable<BetterRectangle, Boolean> taken = new Hashtable<>();
+      // infer where the center of the target is
+      if (allRectanglesThatMayBePartOfATargetPair.size() == 1) {
+        BetterRectangle loneWolf = allRectanglesThatMayBePartOfATargetPair.get(0);
 
-      for (BetterRectangle halfTarget : allRectanglesThatMayBePartOfATargetPair) {
-        if (taken.contains(halfTarget)) {
-          continue;
+        double width = loneWolf.width;
+        double expectedDistance = 5.5 * width;
+        double centerx;
+        double angle;
+        // slanted right
+        if (loneWolf.angle < -45) {
+          angle = -15;
+          centerx = loneWolf.rotatedRectangle.center.x + (expectedDistance);
+        } else {
+          angle = 15;
+          centerx = loneWolf.rotatedRectangle.center.x - (expectedDistance);
         }
-        for (BetterRectangle possibleMatch : allRectanglesThatMayBePartOfATargetPair) {
 
-          if (taken.contains(possibleMatch)) {
+        RotatedRect fake = new RotatedRect(new Point(centerx, loneWolf.rotatedRectangle.center.y),
+            new Size(loneWolf.width, loneWolf.height), angle);
+        BetterRectangle imaginary = new BetterRectangle(fake);
+        Pair p;
+        if (angle == -75) {
+          p = new Pair(imaginary, loneWolf);
+        } else {
+          p = new Pair(loneWolf, imaginary);
+        }
+        targets.add(p);
+      } else {
+        // we have more than one rectangle target thing
+        // check each potential half target against every other, creating
+        // a pair when we find two close enough together and haven't used
+        // either half target in a previous pair
+        boolean[] taken = new boolean[allRectanglesThatMayBePartOfATargetPair.size()];
+        for (int i = 0; i < allRectanglesThatMayBePartOfATargetPair.size(); i++) {
+          BetterRectangle halfTarget = allRectanglesThatMayBePartOfATargetPair.get(i);
+          if (taken[i] == true) {
             continue;
           }
-          if (possibleMatch == halfTarget) {
-            continue;
+          for (int j = 0; j < allRectanglesThatMayBePartOfATargetPair.size(); j++) {
+
+            BetterRectangle possibleMatch = allRectanglesThatMayBePartOfATargetPair.get(j);
+
+            if (taken[j] == true) {
+              continue;
+            }
+            if (possibleMatch == halfTarget) {
+              continue;
+            }
+
+            // we expect a pair to have differing angles
+            if (Math.abs(Math.abs(halfTarget.angle) - Math.abs(possibleMatch.angle)) < 13) {
+              // System.out.println("halfTarget.angle: " + halfTarget.angle);
+              // System.out.println("possibleMatch.angle: " + possibleMatch.angle);
+              // System.out.println("Angle difference: "
+              // + Math.abs((Math.abs(halfTarget.angle) - Math.abs(possibleMatch.angle))));
+              // System.out.println("Removing for angle sameness");
+              continue;
+            }
+
+            double width1 = halfTarget.width;
+            double width2 = possibleMatch.width;
+
+            // we expect our two half targets to be similar in width
+            if (Math.abs(width1 - width2) > 50) {
+              // System.out.println("Removing for width difference");
+              continue;
+            }
+
+            double avgWidth = (width1 + width2) / 2.0;
+            double distance = Math.abs(
+                halfTarget.rotatedRectangle.center.x - possibleMatch.rotatedRectangle.center.x);
+
+            double distToWidthRatio = distance / avgWidth;
+
+            if (distToWidthRatio > 6 || distToWidthRatio < 4) {
+              // System.out.println("Targets too close or too far apart!");
+              continue;
+            }
+
+            double posDif =
+                halfTarget.rotatedRectangle.center.x - possibleMatch.rotatedRectangle.center.x;
+
+            if (posDif < 0 && halfTarget.angle < possibleMatch.angle) {
+              // the contours are in order from right to left
+              // and form a pair
+              targets.add(new Pair(halfTarget, possibleMatch));
+            } else if (posDif > 0 && halfTarget.angle > possibleMatch.angle) {
+              // the contours are in order from left to right
+              // and form a pair
+              targets.add(new Pair(possibleMatch, halfTarget));
+            }
+
+            taken[i] = true;
+            taken[j] = true;
           }
-
-          // we expect a pair to have differing angles
-          if (Math.abs(halfTarget.angle) - Math.abs(possibleMatch.angle) < 20) {
-            System.out.println("Removing for angle sameness");
-            continue;
-          }
-
-          double width1 = halfTarget.width;
-          double width2 = possibleMatch.width;
-
-          // we expect our two half targets to be similar in width
-          if (Math.abs(width1 - width2) > 50) {
-            System.out.println("Removing for width difference");
-            continue;
-          }
-
-          double avgWidth = (width1 + width2) / 2.0;
-          double distance = Math
-              .abs(halfTarget.rotatedRectangle.center.x - possibleMatch.rotatedRectangle.center.x);
-
-          double distToWidthRatio = distance / avgWidth;
-
-          System.out.println("Distance: " + distance);
-          System.out.println("Avg. Width: " + avgWidth);
-          System.out.println("Distance:width ratio: " + distToWidthRatio);
-
-          if (distToWidthRatio > 6 || distToWidthRatio < 4) {
-            System.out.println("Targets too close or too far apart!");
-            continue;
-          }
-
-          taken.put(halfTarget, true);
-          taken.put(possibleMatch, true);
-
-          double posDif =
-              halfTarget.rotatedRectangle.center.x - possibleMatch.rotatedRectangle.center.x;
-
-          if (posDif < 0 && halfTarget.angle < possibleMatch.angle) {
-            // the contours are in order from right to left
-            // and form a pair
-            targets.add(new Pair(halfTarget, possibleMatch));
-          } else if (posDif > 0 && halfTarget.angle > possibleMatch.angle) {
-            // the contours are in order from left to right
-            // and form a pair
-            targets.add(new Pair(possibleMatch, halfTarget));
-          }
-
         }
       }
 
-
+      double smallestAngle = Double.MAX_VALUE;
       for (Pair t : targets) {
         // find center of the target
         double leftx = t.left.rotatedRectangle.center.x;
@@ -435,15 +458,24 @@ public final class Main {
         // width FOV / 2
         double diff = centerx - imageCenterx;
         double angleDiff = (diff / width) * FOV / 2;
-        System.out.println("Angle: " + angleDiff);
+        // System.out.println("Angle: " + angleDiff);
 
-        if (!debugMode) {
-          robotHeading = robotHeading + angleDiff;
-          SmartDashboard.putNumber("target_angle", robotHeading);
+        if (angleDiff < smallestAngle) {
+          smallestAngle = angleDiff;
         }
 
         filteredContours.add(t.left.matOfPoint);
         filteredContours.add(t.right.matOfPoint);
+      }
+
+      if (!debugMode) {
+        if (smallestAngle != Double.MAX_VALUE) {
+          robotHeading = robotHeading + smallestAngle;
+          SmartDashboard.putBoolean("target_found", true);
+        } else {
+          SmartDashboard.putBoolean("target_found", false);
+        }
+        SmartDashboard.putNumber("target_angle", robotHeading);
       }
 
       Imgproc.drawContours(mat, filteredContours, -1, new Scalar(0, 0, 255), 2);
@@ -614,7 +646,7 @@ public final class Main {
     public double area;
     public double angle;
 
-    public BetterRectangle(RotatedRect rectangle, Mat mat) {
+    public BetterRectangle(RotatedRect rectangle) {
       rotatedRectangle = rectangle;
       angle = rotatedRectangle.angle;
 
